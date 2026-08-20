@@ -1,0 +1,17 @@
+if ARCH_FULLHAN
+
+config SYS_SOC
+	default "fullhan"
+
+config TARGET_FULLHAN_IM7
+	bool "Support Fullhan FH8626 Mibo iM7 / IPC-S21F"
+	select CPU_V7A
+	select DM
+	select DM_SERIAL
+	select OF_CONTROL
+	help
+	  Support for Fullhan FH8626 SoC on Intelbras Mibo iM7 / Dahua Imou IPC-S21F.
+
+source "board/dahua/im7/Kconfig"
+
+endif

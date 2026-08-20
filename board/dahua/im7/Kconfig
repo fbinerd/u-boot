@@ -1,0 +1,15 @@
+if TARGET_FULLHAN_IM7
+
+config SYS_BOARD
+	default "im7"
+
+config SYS_VENDOR
+	default "dahua"
+
+config SYS_CONFIG_NAME
+	default "fullhan_im7"
+
+config DEFAULT_DEVICE_TREE
+	default "fullhan-fh8626-im7"
+
+endif

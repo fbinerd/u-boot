@@ -681,6 +681,16 @@ config ARCH_MVEBU
 	select SPI
 	imply CMD_DM
 
+config ARCH_FULLHAN
+	bool "Fullhan Microelectronics SoCs"
+	select CPU_V7A
+	select DM
+	select DM_SERIAL
+	select OF_CONTROL
+	select SYS_NS16550
+	help
+	  Support for Fullhan Microelectronics FH8626 / FH8852 / FH8856 ARM SoCs.
+
 config ARCH_BCM283X
 	bool "Broadcom BCM283X family"
 	select CPU
@@ -2465,6 +2475,7 @@ source "board/phytium/durian/Kconfig"
 source "board/phytium/pomelo/Kconfig"
 source "board/phytium/pe2201/Kconfig"
 source "board/xen/xenguest_arm64/Kconfig"
+source "arch/arm/mach-fullhan/Kconfig"
 
 source "arch/arm/Kconfig.debug"
 

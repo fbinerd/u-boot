@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Device Tree for Fullhan FH8626 (Intelbras Mibo iM7 / Dahua Imou IPC-S21F)
+ *
+ * Copyright (C) 2026 OpenIPC / U-Boot Contributors
+ */
+
+/dts-v1/;
+
+/ {
+	model = "Fullhan FH8626 Mibo iM7 / IPC-S21F";
+	compatible = "fullhan,fh8626-im7", "fullhan,fh8626";
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	chosen {
+		stdout-path = &uart0;
+		bootargs = "console=ttyS0,115200 root=/dev/mtdblock4 rootfstype=squashfs init=/linuxrc mem=48M";
+	};
+
+	memory@a0000000 {
+		device_type = "memory";
+		reg = <0xa0000000 0x04000000>; /* 64 MB RAM */
+	};
+
+	soc {
+		#address-cells = <1>;
+		#size-cells = <1>;
+		compatible = "simple-bus";
+		ranges;
+
+		uart0: serial@f0700000 {
+			compatible = "ns16550a";
+			reg = <0xf0700000 0x1000>;
+			reg-shift = <2>;
+			reg-io-width = <4>;
+			clock-frequency = <50000000>;
+			current-speed = <115200>;
+			status = "okay";
+		};
+
+		spi0: spi@f0500000 {
+			compatible = "fullhan,fh-spi";
+			reg = <0xf0500000 0x1000>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+			status = "okay";
+
+			flash@0 {
+				compatible = "jedec,spi-nor";
+				reg = <0>;
+				spi-max-frequency = <50000000>;
+
+				partitions {
+					compatible = "fixed-partitions";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					partition@0 {
+						label = "U-Boot";
+						reg = <0x00000000 0x00050000>; /* 320 KB */
+					};
+
+					partition@50000 {
+						label = "hwid";
+						reg = <0x00050000 0x00010000>; /* 64 KB */
+					};
+
+					partition@60000 {
+						label = "partition";
+						reg = <0x00060000 0x00010000>; /* 64 KB */
+					};
+
+					partition@70000 {
+						label = "Kernel";
+						reg = <0x00070000 0x00160000>; /* 1408 KB */
+					};
+
+					partition@1d0000 {
+						label = "romfs";
+						reg = <0x001d0000 0x00590000>; /* 5696 KB */
+					};
+
+					partition@760000 {
+						label = "config";
+						reg = <0x00760000 0x00050000>; /* 320 KB */
+					};
+
+					partition@7b0000 {
+						label = "backup";
+						reg = <0x007b0000 0x00050000>; /* 320 KB */
+					};
+				};
+			};
+		};
+	};
+};
