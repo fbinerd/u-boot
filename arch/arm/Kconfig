@@ -683,7 +683,7 @@ config ARCH_MVEBU
 
 config ARCH_FULLHAN
 	bool "Fullhan Microelectronics SoCs"
-	select CPU_V7A
+	select CPU_ARM1176
 	select DM
 	select DM_SERIAL
 	select OF_CONTROL

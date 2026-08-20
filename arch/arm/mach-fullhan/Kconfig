@@ -5,7 +5,7 @@ config SYS_SOC
 
 config TARGET_FULLHAN_IM7
 	bool "Support Fullhan FH8626 Mibo iM7 / IPC-S21F"
-	select CPU_V7A
+	select CPU_ARM1176
 	select DM
 	select DM_SERIAL
 	select OF_CONTROL

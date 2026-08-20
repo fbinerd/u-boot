@@ -14,6 +14,7 @@
 #define CFG_SYS_INIT_RAM_ADDR		0xa0800000
 #define CFG_SYS_INIT_RAM_SIZE		0x40000
 #define CFG_SYS_HZ_CLOCK		50000000
+#define CFG_SYS_UBOOT_BASE		CONFIG_TEXT_BASE
 
 /* Endereço de carga do Kernel e Ramdisk */
 #define CFG_SYS_LOAD_ADDR		0xa0008000
