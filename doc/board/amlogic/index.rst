@@ -114,6 +114,7 @@ Board Documentation
    p200
    p201
    p212
+   p271
    q200
    radxa-zero
    radxa-zero2

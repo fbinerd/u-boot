@@ -1,0 +1,62 @@
+.. SPDX-License-Identifier: GPL-2.0+
+
+U-Boot for Amlogic P271
+=======================
+
+P271 is an Amlogic reference design used by TV boxes based on the GXLX
+variant of the S905L SoC.  The hardware validated for this port has:
+
+* Amlogic S905L quad-core Arm Cortex-A53 SoC at up to 1.2 GHz
+* Mali-450 MP2 GPU
+* 1 GiB LPDDR3
+* 10/100 Ethernet
+* HDMI output
+* USB 2.0 host ports
+* eMMC and microSD storage
+* SSV6006C SDIO Wi-Fi
+
+The Wi-Fi device requires operating-system support and firmware; U-Boot does
+not depend on it.  The device tree intentionally follows the Linux mainline
+P271 description instead of carrying register-level code from the legacy
+vendor bootloader.
+
+Build U-Boot
+------------
+
+Use a recent AArch64 cross compiler::
+
+    $ make CROSS_COMPILE=aarch64-linux-gnu- p271_defconfig
+    $ make CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+
+Alternatively, use the reproducible container build environment::
+
+    $ docker build -t uboot-amlogic-p271-mainline:2026.07 .
+    $ docker run --rm --user "$(id -u):$(id -g)" \
+        -e HOME=/tmp -v "$PWD:/workspace/u-boot" \
+        uboot-amlogic-p271-mainline:2026.07 \
+        bash -lc 'make O=build-p271 p271_defconfig && \
+                  make O=build-p271 -j$(nproc)'
+
+The resulting ``u-boot.bin`` is BL33.  On GXL/GXLX systems, BL33 must be
+packaged with board-compatible Amlogic BL2, ACS/DDR training data, BL30 and
+BL31 firmware.  The firmware extracted from the original P271 image can be
+used for board bring-up; it is not part of the GPL U-Boot source tree.
+
+The experimental open source GXL SPL does not currently expose an LPDDR3
+memory type.  Until P271 LPDDR3 training is implemented and validated, retain
+the board-specific factory BL2/ACS data for hardware tests.
+
+RAM-only USB test
+-----------------
+
+``tools/boot_p271_ram.py`` implements the volatile GXL USB load sequence.  It
+accepts only the SHA-256-verified factory BL2 from the tested P271 unit and
+uses bounded transfers for the TPL.  The helper calls only the pyamlboot RAM
+write, identify and run operations; it has no persistent-storage operation.
+
+Enter the BootROM USB stage before using it.  The response from ``identify``
+must report ROM 2.4, stage 0.0.  The vendor ``update`` command can instead
+leave this unit at stage 0.16, which cannot accept the initial BL2 write.
+
+Do not write an untested image to eMMC.  Test from removable media first and
+retain a complete dump of the original bootloader area.
