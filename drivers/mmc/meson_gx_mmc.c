@@ -332,6 +332,7 @@ static int meson_mmc_probe(struct udevice *dev)
 	struct mmc_config *cfg = &pdata->cfg;
 	struct clk_bulk clocks;
 	uint32_t val;
+	u32 max_blocks;
 	int ret;
 
 	/* Enable the clocks feeding the MMC controller */
@@ -349,13 +350,17 @@ static int meson_mmc_probe(struct udevice *dev)
 			MMC_MODE_HS_52MHz | MMC_MODE_HS;
 	cfg->f_min = DIV_ROUND_UP(SD_EMMC_CLKSRC_24M, CLK_MAX_DIV);
 	cfg->f_max = 40000000; /* 40 MHz */
-	cfg->b_max = 511; /* max 512 - 1 blocks */
+	max_blocks = dev_read_u32_default(dev, "u-boot,max-block-count", 511);
+	if (!max_blocks || max_blocks > 511)
+		return -EINVAL;
+	cfg->b_max = max_blocks;
 	cfg->name = dev->name;
 
 	if (IS_ENABLED(CONFIG_SPL_BUILD)) {
 		cfg->host_caps &= ~(MMC_MODE_HS_52MHz | MMC_MODE_HS);
 		cfg->f_max = 6000000; /* 6 MHz */
-		cfg->b_max = 127; /* max 128 - 1 block */
+		if (cfg->b_max > 127)
+			cfg->b_max = 127; /* max 128 - 1 blocks */
 	}
 
 	mmc->priv = pdata;

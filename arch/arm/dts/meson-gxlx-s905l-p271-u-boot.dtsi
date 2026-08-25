@@ -4,3 +4,8 @@
  */
 
 #include "meson-gxl-u-boot.dtsi"
+
+&sd_emmc_c {
+	/* This board's eMMC rejects CMD18/CMD25 multi-block transfers. */
+	u-boot,max-block-count = <1>;
+};

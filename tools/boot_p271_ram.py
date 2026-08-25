@@ -15,6 +15,7 @@ DDR_LOAD = 0xD9000000
 BL2_PARAMS = 0xD900C000
 UBOOT_LOAD = 0x0200C000
 TPL_CHUNK_SIZE = 64 * 1024
+FIP_STAGE_ADDRESS = 0x20000000
 DDR_TEST_PATTERN = bytes(range(64))
 FACTORY_BL2_SHA256 = (
     "a1b68fca03f9632a880e837933c0caabf32272170131bc7f35d3f45f9e37ebbb"
@@ -62,21 +63,26 @@ def verify_memory(soc: AmlogicSoC, address: int, expected: bytes) -> None:
     logging.info("verified %d SRAM bytes at %#010x", len(expected), address)
 
 
-def write_tpl_chunked(soc: AmlogicSoC, data: bytes) -> None:
-    """Write TPL using bounded transactions to avoid long GXL USB stalls."""
+def write_large_chunked(
+    soc: AmlogicSoC, address: int, data: bytes, label: str
+) -> None:
+    """Write DDR using bounded transactions to avoid long GXL USB stalls."""
     total = len(data)
     for offset in range(0, total, TPL_CHUNK_SIZE):
         chunk = data[offset:offset + TPL_CHUNK_SIZE]
-        logging.info("loading TPL: %d/%d bytes", offset + len(chunk), total)
+        logging.info("loading %s: %d/%d bytes", label,
+                     offset + len(chunk), total)
         soc.writeLargeMemory(
-            UBOOT_LOAD + offset,
+            address + offset,
             chunk,
             blockLength=64,
             appendZeros=True,
         )
 
 
-def load_ram_only(board_dir: Path, params_dir: Path) -> None:
+def load_ram_only(
+    board_dir: Path, params_dir: Path, stage_fip: Path | None
+) -> None:
     bl2 = read_checked(board_dir / "u-boot.bin.usb.bl2", 49152)
     tpl = read_checked(board_dir / "u-boot.bin.usb.tpl")
     ddr_params = read_checked(params_dir / "usbbl2runpara_ddrinit.bin", 32)
@@ -115,7 +121,17 @@ def load_ram_only(board_dir: Path, params_dir: Path) -> None:
     logging.info("loading the verified BL2/FIP set into volatile RAM")
     soc.writeLargeMemory(DDR_LOAD, bl2, blockLength=64)
     soc.writeLargeMemory(BL2_PARAMS, fip_params, blockLength=48)
-    write_tpl_chunked(soc, tpl)
+    write_large_chunked(soc, UBOOT_LOAD, tpl, "TPL")
+
+    if stage_fip is not None:
+        fip = read_checked(stage_fip)
+        if len(fip) % 512:
+            raise ValueError("the staged FIP size must be sector aligned")
+        write_large_chunked(soc, FIP_STAGE_ADDRESS, fip, "flash FIP")
+        logging.info(
+            "staged %d-byte FIP at %#010x; verify it in U-Boot before use",
+            len(fip), FIP_STAGE_ADDRESS,
+        )
 
     entry = BL2_PARAMS if stage == 8 else DDR_LOAD
     logging.info("starting the RAM-only image at %#010x", entry)
@@ -128,10 +144,15 @@ def main() -> None:
     )
     parser.add_argument("board_dir", type=Path)
     parser.add_argument("params_dir", type=Path)
+    parser.add_argument(
+        "--stage-fip", type=Path,
+        help=("also stage a sector-aligned FIP at 0x20000000; this does not "
+              "write persistent storage"),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="[p271-ram] %(message)s")
-    load_ram_only(args.board_dir, args.params_dir)
+    load_ram_only(args.board_dir, args.params_dir, args.stage_fip)
 
 
 if __name__ == "__main__":

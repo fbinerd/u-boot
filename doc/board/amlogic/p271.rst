@@ -60,3 +60,9 @@ leave this unit at stage 0.16, which cannot accept the initial BL2 write.
 
 Do not write an untested image to eMMC.  Test from removable media first and
 retain a complete dump of the original bootloader area.
+
+The eMMC fitted to the validated unit operates reliably with single-block
+commands but rejects the controller's CMD18/CMD25 multi-block transfers.
+The U-Boot-specific device-tree sets ``u-boot,max-block-count = <1>`` so the
+block layer transparently splits larger reads and writes into sector-sized
+operations.  This does not affect the Linux device tree or other Meson boards.
