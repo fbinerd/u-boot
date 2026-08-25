@@ -15,8 +15,9 @@ DDR_LOAD = 0xD9000000
 BL2_PARAMS = 0xD900C000
 UBOOT_LOAD = 0x0200C000
 TPL_CHUNK_SIZE = 64 * 1024
+DDR_TEST_PATTERN = bytes(range(64))
 FACTORY_BL2_SHA256 = (
-    "5fe9cf32b2d6055dd38bd8667c47435d150e792d151b26e01e0ef53e1acf7e97"
+    "a1b68fca03f9632a880e837933c0caabf32272170131bc7f35d3f45f9e37ebbb"
 )
 
 
@@ -43,6 +44,24 @@ def identify(soc: AmlogicSoC) -> tuple[int, ...]:
     return identity
 
 
+def verify_memory(soc: AmlogicSoC, address: int, expected: bytes) -> None:
+    """Read back a simple-memory upload before allowing its execution."""
+    actual = bytearray()
+    for offset in range(0, len(expected), 64):
+        length = min(64, len(expected) - offset)
+        actual.extend(soc.readSimpleMemory(address + offset, length))
+    if actual != expected:
+        mismatch = next(
+            index for index, (left, right) in enumerate(zip(actual, expected))
+            if left != right
+        )
+        raise RuntimeError(
+            f"SRAM verification failed at {address + mismatch:#010x}: "
+            f"read {actual[mismatch]:#04x}, expected {expected[mismatch]:#04x}"
+        )
+    logging.info("verified %d SRAM bytes at %#010x", len(expected), address)
+
+
 def write_tpl_chunked(soc: AmlogicSoC, data: bytes) -> None:
     """Write TPL using bounded transactions to avoid long GXL USB stalls."""
     total = len(data)
@@ -52,7 +71,7 @@ def write_tpl_chunked(soc: AmlogicSoC, data: bytes) -> None:
         soc.writeLargeMemory(
             UBOOT_LOAD + offset,
             chunk,
-            blockLength=512,
+            blockLength=64,
             appendZeros=True,
         )
 
@@ -78,6 +97,7 @@ def load_ram_only(board_dir: Path, params_dir: Path) -> None:
 
     logging.info("loading BL2 to SRAM at %#010x", DDR_LOAD)
     soc.writeMemory(DDR_LOAD, bl2)
+    verify_memory(soc, DDR_LOAD, bl2)
     soc.writeLargeMemory(BL2_PARAMS, ddr_params, blockLength=32)
     soc.run(DDR_LOAD)
     time.sleep(1)
@@ -87,6 +107,10 @@ def load_ram_only(board_dir: Path, params_dir: Path) -> None:
         logging.info("running DDR parameters at %#010x", BL2_PARAMS)
         soc.run(BL2_PARAMS)
         time.sleep(1)
+
+    logging.info("probing initialized DDR at %#010x", UBOOT_LOAD)
+    soc.writeMemory(UBOOT_LOAD, DDR_TEST_PATTERN)
+    verify_memory(soc, UBOOT_LOAD, DDR_TEST_PATTERN)
 
     logging.info("loading the verified BL2/FIP set into volatile RAM")
     soc.writeLargeMemory(DDR_LOAD, bl2, blockLength=64)

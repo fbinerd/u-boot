@@ -6,5 +6,6 @@ F:	arch/arm/dts/meson-gxlx-s905l-p271-u-boot.dtsi
 F:	board/amlogic/p271/
 F:	configs/p271_defconfig
 F:	doc/board/amlogic/p271.rst
+F:	include/configs/p271.h
 F:	dts/upstream/src/arm64/amlogic/meson-gxlx-s905l-p271.dts
 F:	tools/boot_p271_ram.py

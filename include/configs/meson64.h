@@ -42,6 +42,7 @@
 #define CFG_SYS_SDRAM_BASE		0
 
 /* ROM USB boot support, auto-execute boot.scr at scriptaddr */
+#ifndef BOOTENV_DEV_ROMUSB
 #define BOOTENV_DEV_ROMUSB(devtypeu, devtypel, instance) \
 	"bootcmd_romusb=" \
 		"if test \"${boot_source}\" = \"usb\" && " \
@@ -49,6 +50,7 @@
 			"echo '(ROM USB boot)'; " \
 			"source ${scriptaddr}; " \
 		"fi\0"
+#endif
 
 #define BOOTENV_DEV_NAME_ROMUSB(devtypeu, devtypel, instance)	\
 		"romusb "
