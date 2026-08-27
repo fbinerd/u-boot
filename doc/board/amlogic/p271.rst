@@ -66,3 +66,37 @@ commands but rejects the controller's CMD18/CMD25 multi-block transfers.
 The U-Boot-specific device-tree sets ``u-boot,max-block-count = <1>`` so the
 block layer transparently splits larger reads and writes into sector-sized
 operations.  This does not affect the Linux device tree or other Meson boards.
+
+Default boot and TFTP environment
+---------------------------------
+
+The default environment boots the untouched factory Android image directly
+from eMMC device 2.  The offsets are taken from the verified 7.3 GiB dump of
+this exact board: partition ``boot`` starts at LBA ``0x2ae000`` and occupies
+``0x8000`` sectors.  U-Boot validates the Android header and inner legacy
+uImage magic, decompresses the vendor multi-DTB payload, validates the first
+DTB (P271 board ID 1), and only then runs ``bootm``.  Any failed validation
+returns to the command prompt instead of falling through to network boot.
+
+The automatic command is ``run boot_emmc_original``.  ``run boot_tftp`` is a
+manual development path and loads ``Image``,
+``meson-gxlx-s905l-p271.dtb`` and ``android-initramfs.cpio.gz`` from
+``192.168.1.10``.  The board defaults to ``192.168.1.199/24`` with gateway
+``192.168.1.254``.  TFTP is deliberately not an automatic fallback: a missing
+server must never delay normal factory boot.
+
+These offsets and component sizes describe the preserved factory image only.
+If the factory ``boot`` partition is ever replaced, regenerate the environment
+from the new Android boot header rather than reusing the constants blindly.
+
+The factory boot path needs ``CONFIG_CMD_UNZIP`` because the Android v0
+``second`` component is a gzip-compressed Amlogic multi-DTB container.  The
+verified board-ID-1 DTB begins at offset ``0x800`` in its uncompressed
+``0x39800``-byte payload.  The inner kernel is a 32-bit legacy uImage, so this
+configuration also retains legacy-image and AArch32 handoff support.
+
+After packaging BL33, extract the resulting FIP again and compare BL2, BL30,
+BL301 and BL31 byte-for-byte with the factory inputs.  This catches accidental
+firmware substitutions before a RAM-only hardware test.  A successful local
+build and package validation does not replace that hardware test and is not
+authorization to write the image to eMMC.
