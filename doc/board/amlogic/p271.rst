@@ -100,3 +100,24 @@ BL301 and BL31 byte-for-byte with the factory inputs.  This catches accidental
 firmware substitutions before a RAM-only hardware test.  A successful local
 build and package validation does not replace that hardware test and is not
 authorization to write the image to eMMC.
+
+Persistent environment
+----------------------
+
+The factory ``env`` reservation starts at eMMC user-area offset
+``0x4d400000`` and is 8 MiB long.  Its first 64 KiB contain a valid legacy
+environment used by the factory bootloader.  Loading that copy in mainline
+would also import the incompatible vendor ``storeboot`` command, which depends
+on the proprietary ``imgread`` command.
+
+Mainline therefore stores its 64-KiB environment in the second slot, at
+``0x4d410000`` on MMC device 2.  The complete factory dump confirms that this
+slot is empty.  This preserves the factory environment at ``0x4d400000`` for
+rollback while allowing ``saveenv`` to persist mainline settings.  Until the
+first successful ``saveenv``, the empty slot fails CRC validation and U-Boot
+uses the compiled defaults, including ``boot_emmc_original``.
+
+To restore and persist all compiled defaults::
+
+    => env default -a
+    => saveenv
