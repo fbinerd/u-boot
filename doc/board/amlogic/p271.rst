@@ -92,8 +92,29 @@ from the new Android boot header rather than reusing the constants blindly.
 The factory boot path needs ``CONFIG_CMD_UNZIP`` because the Android v0
 ``second`` component is a gzip-compressed Amlogic multi-DTB container.  The
 verified board-ID-1 DTB begins at offset ``0x800`` in its uncompressed
-``0x39800``-byte payload.  The inner kernel is a 32-bit legacy uImage, so this
-configuration also retains legacy-image and AArch32 handoff support.
+``0x39800``-byte payload.  The inner kernel is an ARM zImage wrapper in a
+legacy uImage.  Its stale inner header requests ``0x00108000``, but captured
+factory-boot logs for this exact kernel prove that the vendor path actually
+loads and enters it at ``0x01080000``.
+After checking all three image magics, the automatic path patches only the
+RAM copy of the inner load address, entry point and corresponding header CRC.
+The original eMMC bytes are not changed, and ``bootm`` still verifies the
+payload CRC.  The address also keeps the generic GX firmware reservation and
+the BL31/BL32 reservations intact.  ``initrd_high`` and ``fdt_high`` are both
+limited to ``0x0a000000``, matching the working vendor placement and avoiding
+the dynamic multimedia reserved-memory pools near the top of the 1-GiB RAM.
+
+Vendor BL31 enters the 64-bit U-Boot at EL2.  Mainline's generic
+``armv8_el2_to_aarch32`` is intentionally a weak no-op for platforms that need
+a firmware-specific transition.  Meson supplies an override which uses the
+standard ARMv8 EL2-to-AArch32-EL1 transition and preserves the Linux
+``r0/r1/r2`` boot protocol.  This is used only for 32-bit kernels; 64-bit
+kernels retain their normal EL2 handoff.
+
+The complete factory boot image is staged at ``0x20000000``.  Do not move it
+back to ``0x10000000``: vendor BL31 occupies memory beginning at
+``0x10100000``.  A RAM-only hardware test caught that overlap when legacy
+uImage checksum verification reached the protected BL31 mapping.
 
 After packaging BL33, extract the resulting FIP again and compare BL2, BL30,
 BL301 and BL31 byte-for-byte with the factory inputs.  This catches accidental
