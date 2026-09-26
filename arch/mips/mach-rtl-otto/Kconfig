@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: GPL-2.0+
+
+menu "Realtek OTTO platforms"
+	depends on ARCH_RTL_OTTO
+
+config SYS_SOC
+	default "rtl-otto"
+
+config SOC_RTL8380
+	bool
+	select MIPS_INIT_STACK_IN_SRAM
+	select MIPS_TUNE_4KC
+	select ROM_EXCEPTION_VECTORS
+	select SUPPORT_BIG_ENDIAN
+	# Stage-1 uses MIPS32 Release 2 instructions observed working on RTL8380.
+	select SUPPORTS_CPU_MIPS32_R2
+	help
+	  Realtek RTL8380/RTL838x MIPS 4KEc switch SoCs.
+
+config RTL838X_PORT_LED
+	bool "RTL838x port LED engine, software control"
+	depends on SOC_RTL8380
+	help
+	  Software control of the two LED channels of every port of the
+	  RTL838x LED engine, without the driver-model LED stack.
+
+config RTL8231_EXPANDER
+	bool "Realtek RTL8231 GPIO expander on the RTL838x auxiliary MDIO bus"
+	depends on SOC_RTL8380
+	help
+	  Minimal access to an RTL8231 behind the RTL838x auxiliary MDIO
+	  controller (SoC GPIO2/GPIO3 as MDC/MDIO): start it and drive one
+	  pin as an output.
+
+choice
+	prompt "Board select"
+
+config TARGET_INTELBRAS_SG1002_MR
+	bool "RTL8380M_INTPHY_2FIB_1G_DEMO"
+	select SOC_RTL8380
+	select RTL838X_PORT_LED
+	select RTL8231_EXPANDER
+
+endchoice
+
+source "board/intelbras/sg1002_mr/Kconfig"
+
+endmenu

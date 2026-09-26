@@ -88,6 +88,18 @@ config ARCH_MTMIPS
 	select SUPPORT_LITTLE_ENDIAN
 	select SUPPORT_SPL
 
+config ARCH_RTL_OTTO
+	bool "Realtek OTTO switch platforms"
+	select HAS_FIXED_TIMER_FREQUENCY
+	select DM
+	select OF_CONTROL
+	select ROM_EXCEPTION_VECTORS
+	select SUPPORT_BIG_ENDIAN
+	select SUPPORTS_CPU_MIPS32_R2
+	imply DM_SERIAL
+	imply DM_SPI
+	imply DM_SPI_FLASH
+
 config ARCH_JZ47XX
 	bool "Support Ingenic JZ47xx"
 	select SUPPORT_SPL
@@ -202,12 +214,14 @@ source "arch/mips/mach-bmips/Kconfig"
 source "arch/mips/mach-jz47xx/Kconfig"
 source "arch/mips/mach-pic32/Kconfig"
 source "arch/mips/mach-mtmips/Kconfig"
+source "arch/mips/mach-rtl-otto/Kconfig"
 source "arch/mips/mach-octeon/Kconfig"
 
 if MIPS
 
 choice
 	prompt "CPU selection"
+	default CPU_MIPS32_R2 if SOC_RTL8380
 	default CPU_MIPS32_R2
 
 config CPU_MIPS32_R1

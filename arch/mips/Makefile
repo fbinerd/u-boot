@@ -19,6 +19,7 @@ machine-$(CONFIG_ARCH_BMIPS) += bmips
 machine-$(CONFIG_ARCH_JZ47XX) += jz47xx
 machine-$(CONFIG_MACH_PIC32) += pic32
 machine-$(CONFIG_ARCH_MTMIPS) += mtmips
+machine-$(CONFIG_ARCH_RTL_OTTO) += rtl-otto
 machine-$(CONFIG_ARCH_MSCC) += mscc
 machine-${CONFIG_ARCH_OCTEON} += octeon
 
