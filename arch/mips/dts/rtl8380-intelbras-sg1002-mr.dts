@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-2.0+
+
+/dts-v1/;
+
+/ {
+	/* Matches the Linux-side DTS model string (openwrt target/linux/realtek). */
+	model = "Intelbras SG 1002 MR L2+ (RTL8380M INTPHY 2FIB 1G)";
+	compatible = "realtek,rtl8380m-intphy-2fib-1g-demo", "realtek,rtl8380";
+
+	#address-cells = <1>;
+	#size-cells = <1>;
+
+	aliases {
+		serial0 = &uart0;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+	};
+
+	uart0: serial@18002000 {
+		compatible = "realtek,rtl8380-uart";
+		reg = <0x18002000 0x100>;
+		reg-shift = <2>;
+		reg-io-width = <1>;
+		clock-frequency = <200000000>;
+		current-speed = <115200>;
+		status = "okay";
+	};
+
+	ethernet@1b000000 {
+		compatible = "realtek,rtl8380-eth";
+		reg = <0x1b000000 0x10000>;
+		status = "okay";
+	};
+
+	spi@18001200 {
+		compatible = "realtek,rtl8380-spi";
+		reg = <0x18001200 0x100>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		status = "okay";
+
+		flash@0 {
+			compatible = "jedec,spi-nor";
+			reg = <0>;
+			spi-max-frequency = <25000000>;
+		};
+	};
+};

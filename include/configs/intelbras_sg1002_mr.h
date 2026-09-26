@@ -1,0 +1,27 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
+
+#ifndef __CONFIG_INTELBRAS_SG1002_MR_H
+#define __CONFIG_INTELBRAS_SG1002_MR_H
+
+/* RTL8380 maps the OTTO peripheral window at physical 0x18000000. */
+#define CFG_SYS_PERIPHERAL_BASE	0x18000000
+#define CFG_SYS_SDRAM_BASE		0x80000000
+#define CFG_SYS_INIT_SP_OFFSET		0x00100000
+#define CFG_SYS_INIT_SP_ADDR		(CFG_SYS_SDRAM_BASE + 0x00100000)
+
+/* The original dump uses a 64 KiB environment immediately after U-Boot. */
+#define CFG_ENV_SIZE			0x10000
+#define CFG_ENV_OFFSET			0x40000
+#define CFG_ENV_SECT_SIZE		0x10000
+
+#define CFG_SYS_MALLOC_LEN		0x40000
+#define CFG_SYS_BOOTM_LEN		0x2000000
+
+#define CFG_SYS_NS16550_CLK		200000000
+#define CFG_SYS_NS16550_COM1		(CFG_SYS_PERIPHERAL_BASE + 0x2000)
+
+#define CFG_SYS_MAXARGS			16
+#define CFG_SYS_CBSIZE			256
+#define CFG_SYS_PBSIZE			(CFG_SYS_CBSIZE + 64)
+
+#endif

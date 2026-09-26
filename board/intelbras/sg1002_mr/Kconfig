@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0+
+
+if TARGET_INTELBRAS_SG1002_MR
+
+config SYS_VENDOR
+	default "intelbras"
+
+config SYS_BOARD
+	default "sg1002_mr"
+
+config SYS_CONFIG_NAME
+	default "intelbras_sg1002_mr"
+
+config TEXT_BASE
+	default 0x83f01000
+
+config INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	bool "Factory bootstrap copied DDR payload"
+	default y
+	help
+	  Reserve the initial 4 KiB of the factory-copied main payload for its
+	  fixed entry trampoline while retaining a 64 KiB aligned MIPS text base.
+
+endif
