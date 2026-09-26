@@ -1,0 +1,138 @@
+.. SPDX-License-Identifier: GPL-2.0+
+
+Intelbras SG 1002 MR L2+
+=========================
+
+:Author: Fabiano Tassotti <fabianotassotti@gmail.com>
+
+Overview
+--------
+
+The Intelbras SG 1002 MR L2+ is a Realtek RTL8380M-based (MIPS 4KEc,
+big-endian) 10-port managed switch: eight internal RTL8218B copper PHYs
+(front-panel lan1-lan8) and two 1000BASE-X SFP cages (lan9-lan10), 128 MiB
+DDR3, a 16 MiB SPI NOR, and an RTL8231 GPIO expander that drives the SYS
+LED.
+
+The vendor firmware is a proprietary two-stage boot chain (a NOR/SRAM
+bootstrap, then a VxWorks-based bootrom and runtime) with no publicly
+documented GPL bootloader for this exact board. This tree is a from-scratch,
+GPL-only replacement for both stages, built by reverse-engineering the
+vendor's boot sequence on real hardware (bus traces, register reads, and
+physical flash programming with a CH341A SPI programmer), together with
+Realtek's GPL SDK sources and the equivalent Linux drivers already upstream
+in OpenWrt's ``target/linux/realtek``. It boots straight to a GPL U-Boot
+prompt and from there to a mainline Linux/OpenWrt kernel, with no
+proprietary code in the path.
+
+Status: good enough to boot OpenWrt reliably
+---------------------------------------------
+
+This has been running as the board's boot chain in daily use, with dozens
+of confirmed software resets, several full power cycles, and OpenWrt
+``sysupgrade`` all working on the physical unit this was developed against.
+That is the actual goal this project was built for, and it is met.
+
+It has **not** been validated across multiple boards, silicon lots, or
+temperature ranges, and the DDR training code has not had an
+instruction-by-instruction audit against the vendor SDK (see
+``sg1002-mr-findings.md``). Anyone reusing this on a different unit, or
+depending on it for anything beyond "this one board boots OpenWrt", should
+read that document's open items before trusting it further.
+
+Two-stage boot chain
+---------------------
+
+::
+
+  SPI NOR reset vector (0x000000) -> GPL Stage-1 (SRAM, DDR training)
+    -> GPL Stage-2 (U-Boot proper) -> OpenWrt / mainline Linux
+
+Flash map (16 MiB SPI NOR, W25Q128):
+
+======================  =========  =========================================
+Offset                  Size       Contents
+======================  =========  =========================================
+``0x000000``-``0x007fff``  32 KiB   Stage-1: reset vector, DDR3 training, copies Stage-2 to RAM
+``0x008000``-``0x03ffff``  224 KiB  Stage-2: this GPL U-Boot, linked at ``0x83f01000``
+``0x040000``-``0x04ffff``  64 KiB   U-Boot environment
+``0x050000``-``0x13ffff``  1 MiB    Vendor VxWorks bootrom (untouched, kept as a fallback boot target)
+``0x140000``-``0x14ffff``  64 KiB   Factory data (MAC address; read-only)
+``0x150000``-``0xfcffff``  ~14.5 MiB  OpenWrt firmware partition (kernel + rootfs)
+``0xfd0000``-``0xffffff``  192 KiB  Reserved, erased in the factory dump
+======================  =========  =========================================
+
+Stage-1 (``arch/mips/mach-rtl-otto/preloader/``) runs from the SPI NOR reset
+vector, brings up the DDR3 controller (a from-scratch SRAM-resident port of
+Realtek's GPL calibration algorithm, see ``sg1002-mr-findings.md``), copies
+Stage-2 into DRAM, and jumps to it. Stage-2 is this tree's own GPL U-Boot,
+built and linked for this board like any other U-Boot port
+(``board/intelbras/sg1002_mr/``,
+``configs/intelbras_sg1002_mr_factory_payload_defconfig``).
+
+At every boot, ``board_late_init()`` decides between the OpenWrt image at
+``$openwrt_addr`` and the vendor VxWorks bootrom at ``$vxworks_addr`` by
+reading the legacy uImage magic at the OpenWrt address -- the same
+multi-boot behaviour the vendor firmware itself implements, kept
+intentionally so a ``Switch.bin`` filesystem placed back at ``0x150000``
+would still boot VxWorks. ``boot_auto``, ``openwrt_addr`` and
+``vxworks_addr`` live only in the environment, with no compiled-in
+fallback; a missing or malformed variable is reported on the console and
+autoboot is disabled rather than guessing.
+
+Building and flashing
+-----------------------
+
+::
+
+  export STAGING_DIR=<openwrt-tree>/staging_dir
+  export PATH=$STAGING_DIR/toolchain-mips_24kc_gcc-14.4.0_musl/bin:$PATH
+  export CROSS_COMPILE=mips-openwrt-linux-musl-
+  sh tools/build-sg1002-mr.sh <output-dir>
+
+This produces ``preloader.bin`` (Stage-1), ``u-boot.bin`` (Stage-2),
+``env.bin`` (the compiled default environment), and ready-to-flash
+composites. See the script's own header comment for the exact byte layout
+of each output file.
+
+To check that a build reproduces the current board-verified reference
+(only the embedded U-Boot version string may legitimately differ)::
+
+  python3 tools/check-sg1002-mr-repro.py
+
+``artifacts/known-good-v219/`` is an earlier full 16 MiB image, last
+verified with a CH341A programmer, kept as the recovery reference if
+Stage-1 ever needs to be reflashed externally (a bad Stage-1 will not boot
+at all, and cannot be recovered through the board's own SPI controller;
+pass it as ``--ref`` to compare against that specific point instead of the
+current one). Everything since then, including the current default
+reference in ``artifacts/known-good-v238/``, was written from a running
+U-Boot prompt over TFTP, with ``sf erase``/``sf write`` limited to the
+exact byte range being replaced and a full readback comparison before
+every reset; see ``sg1002-mr-findings.md`` for what was verified on
+hardware at each step.
+
+The QEMU model
+----------------
+
+A behavioural QEMU 9.1 machine model of this board (``rtl8380-sg1002-mr``)
+lives in a separate repository; see ``sg1002-mr-emulator.md`` in this
+directory for what it does and does not reproduce, and how it was used
+during development. It tests boot-chain logic and control flow -- flash
+programming semantics, the environment, the watchdog, the LED engine and
+RTL8231 -- not the board itself: it has no DDR training margin, no cache
+model, and no Ethernet PHY.
+
+Further reading
+-----------------
+
+- ``sg1002-mr-findings.md``: what is fixed and verified on hardware, what
+  is a known, accepted limitation, and what is genuinely open, file by
+  file.
+- ``sg1002-mr-emulator.md``: the QEMU model's own findings and its
+  mutation-testing coverage.
+- ``../intelbras-sg1002-mr-bringup.md``: a detailed, chronological
+  bring-up diary (Portuguese) kept for historical reference. It is long and
+  written as a working log, not as documentation; reading
+  ``sg1002-mr-findings.md`` first is enough for a review, and this diary is
+  optional.
