@@ -79,6 +79,25 @@ static void serial_find_console_or_panic(void)
 	int ret;
 #endif
 
+	/*
+	 * Leftover of a bring-up diagnostic that counted the devices bound to
+	 * UCLASS_SERIAL.  The count is unused now; it stays only so that the
+	 * flashed binary is reproduced bit for bit (dropping it is a separate,
+	 * binary-changing cleanup).
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)) {
+		struct uclass *uc;
+
+		if (!uclass_get(UCLASS_SERIAL, &uc)) {
+			struct udevice *d;
+			int devcount = 0;
+
+			list_for_each_entry(d, &uc->dev_head, uclass_node)
+				devcount++;
+		} else {
+		}
+	}
+
 	if (CONFIG_IS_ENABLED(OF_PLATDATA)) {
 		uclass_first_device(UCLASS_SERIAL, &dev);
 		if (dev) {
@@ -138,9 +157,15 @@ static void serial_find_console_or_panic(void)
 			}
 		}
 #else
-		if (!uclass_get_device_by_seq(UCLASS_SERIAL, INDEX, &dev) ||
-		    !uclass_get_device(UCLASS_SERIAL, INDEX, &dev) ||
-		    !uclass_first_device_err(UCLASS_SERIAL, &dev)) {
+		if (!uclass_get_device_by_seq(UCLASS_SERIAL, INDEX, &dev)) {
+			gd->cur_serial_dev = dev;
+			return;
+		}
+		if (!uclass_get_device(UCLASS_SERIAL, INDEX, &dev)) {
+			gd->cur_serial_dev = dev;
+			return;
+		}
+		if (!uclass_first_device_err(UCLASS_SERIAL, &dev)) {
 			gd->cur_serial_dev = dev;
 			return;
 		}
@@ -189,6 +214,17 @@ int fetch_baud_from_dtb(void)
 /* Called prior to relocation */
 int serial_init(void)
 {
+	/*
+	 * The factory handoff reaches U-Boot before the control DTB and the device
+	 * model exist; UART0 is already configured by Stage-1.  Skip the DM console
+	 * selection on the pre-relocation call: serial_initialize() calls back in
+	 * here after relocation (hence the runtime GD_FLG_RELOC test: an
+	 * IS_ENABLED() test alone would skip both calls).
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD) &&
+	    !(gd->flags & GD_FLG_RELOC))
+		return 0;
+
 #if CONFIG_IS_ENABLED(SERIAL_PRESENT)
 	serial_find_console_or_panic();
 	if (gd->cur_serial_dev)
@@ -568,8 +604,12 @@ static int serial_post_probe(struct udevice *dev)
 #endif
 	int ret;
 
-	/* Set the baud rate */
-	if (ops->setbrg) {
+	/*
+	 * The devicetree's current-speed already set the rate in the driver's
+	 * probe(); a second setbrg() from gd->baudrate (the saved environment) is
+	 * skipped on this board, see drivers/serial/serial_rtl8380.c.
+	 */
+	if (!IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD) && ops->setbrg) {
 		ret = ops->setbrg(dev, gd->baudrate);
 		if (ret)
 			return ret;

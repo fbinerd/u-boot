@@ -58,6 +58,10 @@
 #include <watchdog.h>
 #include <xen.h>
 #include <asm/sections.h>
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+#include <asm/addrspace.h>
+#include <asm/io.h>
+#endif
 #include <dm/root.h>
 #include <dm/ofnode.h>
 #include <linux/compiler.h>
@@ -585,6 +589,20 @@ static int run_main_loop(void)
 	return 0;
 }
 
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+/*
+ * Stand-in for board_f.c's announce_dram_init() + show_dram_config(): this
+ * board has one fixed 128 MiB bank (mach-rtl-otto/cpu.c) and the Stage-2
+ * window has no room for show_dram_config()'s multi-bank logic.
+ */
+static int sg1002_show_dram(void)
+{
+	puts("DRAM:  ");
+	print_size(gd->ram_size, "\n");
+	return 0;
+}
+#endif
+
 /*
  * Over time we hope to remove most of the driver-related init and do it
  * if/when the driver is later used.
@@ -624,6 +642,14 @@ static void initcall_run_r(void)
 #endif
 #if CONFIG_IS_ENABLED(SYS_HAS_NONCACHED_MEMORY)
 	INITCALL(noncached_init);
+#endif
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	/*
+	 * board_f.c skips fdtdec_setup() for this payload (the DTB is appended to
+	 * the image and the console is not up yet): run it here, after relocation,
+	 * before initr_of_live()/initr_dm() need gd->fdt_blob.
+	 */
+	INITCALL(fdtdec_setup);
 #endif
 	INITCALL(initr_of_live);
 #if CONFIG_IS_ENABLED(DM)
@@ -709,6 +735,24 @@ static void initcall_run_r(void)
 #if CONFIG_IS_ENABLED(PVBLOCK)
 	INITCALL(initr_pvblock);
 #endif
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	/*
+	 * Disarm, as early as possible, the watchdog that Stage-1 leaves running
+	 * (board_late_init() repeats this harmlessly).
+	 */
+	writel(0xc0000000, (void __iomem *)CKSEG1ADDR(0x18003154));
+	writel(0x00000001, (void __iomem *)CKSEG1ADDR(0x18003158));
+#endif
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	/*
+	 * env_init() has to run before initr_env(): with CONFIG_ENV_ADDR unset the
+	 * SPI backend never marks gd->env_valid, so env_relocate() would skip
+	 * env_load() and always use the compiled-in default (and saveenv would fail
+	 * with "not initialized").  Running it here makes env_relocate() read and
+	 * CRC-check the environment at CONFIG_ENV_OFFSET.
+	 */
+	INITCALL(env_init);
+#endif
 	INITCALL(initr_env);
 #if CONFIG_IS_ENABLED(SYS_MALLOC_BOOTPARAMS)
 	INITCALL(initr_malloc_bootparams);
@@ -731,11 +775,31 @@ static void initcall_run_r(void)
 #if CONFIG_IS_ENABLED(API)
 	INITCALL(api_init);
 #endif
-	INITCALL(console_init_r);	/* fully init console as a device */
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	/*
+	 * board_f.c skips console_init_f() for this payload, so nothing sets
+	 * GD_FLG_HAVE_CONSOLE and every printf() is a silent no-op: run it here,
+	 * right before the console is fully initialised.
+	 */
+	INITCALL(console_init_f);
+#endif
 #if CONFIG_IS_ENABLED(DISPLAY_BOARDINFO_LATE)
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	/* The early console is absent on this payload, so print the banner now. */
+	INITCALL(display_options);
+#if CONFIG_IS_ENABLED(DISPLAY_CPUINFO)
+	INITCALL(print_cpuinfo);
+#endif
+#else
 	INITCALL(console_announce_r);
+#endif
 	INITCALL(show_board_info);
 #endif
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+	/* The "DRAM:" line, for the same reason (see sg1002_show_dram()). */
+	INITCALL(sg1002_show_dram);
+#endif
+	INITCALL(console_init_r);	/* fully init console as a device */
 	/* miscellaneous arch-dependent init */
 #if CONFIG_IS_ENABLED(ARCH_MISC_INIT)
 	INITCALL(arch_misc_init);

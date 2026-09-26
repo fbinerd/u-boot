@@ -95,6 +95,16 @@ __weak void board_add_ram_info(int use_default)
 
 static int init_baud_rate(void)
 {
+	/*
+	 * The factory payload intentionally postpones env_init() until after
+	 * relocation.  Do not dereference the pre-relocation environment here;
+	 * serial_init() only requires the configured fallback value.
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)) {
+		gd->baudrate = CONFIG_BAUDRATE;
+		return 0;
+	}
+
 	gd->baudrate = env_get_ulong("baudrate", 10, CONFIG_BAUDRATE);
 	return 0;
 }
@@ -472,6 +482,13 @@ static int reserve_uboot(void)
 	#if defined(CONFIG_E500) || defined(CONFIG_MIPS)
 		/* round down to next 64 kB limit so that IVPR stays aligned */
 		gd->relocaddr &= ~(65536 - 1);
+		/*
+		 * Factory-bootstrap payloads execute at DDR + 0x1000. Preserve
+		 * that low address part at the relocation destination, retaining
+		 * the required 64 KiB MIPS relocation delta.
+		 */
+		if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD))
+			gd->relocaddr += 0x1000;
 	#endif
 
 		debug("Reserving %dk for U-Boot at: %08lx\n",
@@ -746,6 +763,27 @@ static int fix_fdt(void)
 }
 #endif
 
+#ifdef CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD
+/*
+ * Busy-wait between the relocation-setup initcalls.  It comes from the
+ * bring-up of the relocation path and is kept because the flashed binary
+ * has it: removing it changes the boot timing and has not been re-tested
+ * on the hardware.
+ */
+static inline void sg1002_init_delay(void)
+{
+	volatile unsigned long sg1002_delay_i;
+
+	for (sg1002_delay_i = 0; sg1002_delay_i < 2000000UL; sg1002_delay_i++)
+		;
+}
+
+#else
+static inline void sg1002_init_delay(void)
+{
+}
+#endif
+
 /* ARM calls relocate_code from its crt0.S */
 #if !defined(CONFIG_ARM) && !defined(CONFIG_SANDBOX)
 
@@ -808,6 +846,14 @@ static int initf_bootstage(void)
 static int initf_dm(void)
 {
 	int ret;
+
+	/*
+	 * Stage-1 enters the payload with board state which cannot yet satisfy
+	 * the early full DM scan. The post-relocation scan remains responsible
+	 * for binding the normal devices.
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD))
+		return 0;
 
 	if (!CONFIG_IS_ENABLED(SYS_MALLOC_F))
 		return 0;
@@ -883,7 +929,8 @@ static void initcall_run_f(void)
 	 * For simplicity it should remain an ordered list of function calls.
 	 */
 	INITCALL(setup_mon_len);
-#if CONFIG_IS_ENABLED(OF_CONTROL)
+#if CONFIG_IS_ENABLED(OF_CONTROL) && \
+	!CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
 	INITCALL(fdtdec_setup);
 #endif
 #if CONFIG_IS_ENABLED(TRACE_EARLY)
@@ -916,12 +963,22 @@ static void initcall_run_f(void)
 #if CONFIG_IS_ENABLED(BOARD_POSTCLK_INIT)
 	INITCALL(board_postclk_init);
 #endif
+#if !CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
 	INITCALL(env_init);		/* initialize environment */
+#endif
 	INITCALL(init_baud_rate);	/* initialze baudrate settings */
 	INITCALL(serial_init);		/* serial communications setup */
+	/*
+	 * Factory Stage-1 owns UART0 but enters this payload before the
+	 * control DTB/device model is available.  The DM serial console is
+	 * therefore deferred until after relocation; do not emit the normal
+	 * pre-relocation banners through an unbound console.
+	 */
+#if !CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
 	INITCALL(console_init_f);	/* stage 1 init of console */
 	INITCALL(display_options);	/* say that we are here */
 	INITCALL(display_text_info);	/* show debugging info if required */
+#endif
 	INITCALL(checkcpu);
 #if CONFIG_IS_ENABLED(SYSRESET)
 	INITCALL(print_resetinfo);
@@ -933,7 +990,8 @@ static void initcall_run_f(void)
 #if CONFIG_IS_ENABLED(DTB_RESELECT)
 	INITCALL(embedded_dtb_select);
 #endif
-#if CONFIG_IS_ENABLED(DISPLAY_BOARDINFO)
+#if CONFIG_IS_ENABLED(DISPLAY_BOARDINFO) && \
+	!CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
 	INITCALL(show_board_info);
 #endif
 	WATCHDOG_INIT();
@@ -942,7 +1000,9 @@ static void initcall_run_f(void)
 #if CONFIG_IS_ENABLED(SYS_I2C_LEGACY)
 	INITCALL(init_func_i2c);
 #endif
+#if !CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
 	INITCALL(announce_dram_init);
+#endif
 	INITCALL(dram_init);		/* configure available RAM banks */
 #if CONFIG_IS_ENABLED(POST)
 	INITCALL(post_init_f);
@@ -977,6 +1037,17 @@ static void initcall_run_f(void)
 	INITCALL(reserve_pram);
 #endif
 	INITCALL(reserve_round_4k);
+	/*
+	 * Same kind of busy-wait, right after reserve_round_4k() (see
+	 * sg1002_init_delay()).
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)) {
+		volatile unsigned long sg1002_delay_i;
+
+		for (sg1002_delay_i = 0; sg1002_delay_i < 5000000UL;
+		     sg1002_delay_i++)
+			;
+	}
 	INITCALL(setup_relocaddr_from_bloblist);
 	INITCALL(arch_reserve_mmu);
 	INITCALL(reserve_video);
@@ -995,23 +1066,37 @@ static void initcall_run_f(void)
 	INITCALL(reserve_bloblist);
 	INITCALL(reserve_arch);
 	INITCALL(reserve_stacks);
+	sg1002_init_delay();
 	INITCALL(dram_init_banksize);
+	sg1002_init_delay();
+#if !CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	/*
+	 * show_dram_config() runs before the console exists on this payload, so its
+	 * output would be lost; common/board_r.c prints the DRAM line instead.
+	 */
 	INITCALL(show_dram_config);
+#endif
 	WATCHDOG_RESET();
+	sg1002_init_delay();
 	INITCALL(setup_bdinfo);
+	sg1002_init_delay();
 	INITCALL(display_new_sp);
 	WATCHDOG_RESET();
 #if !CONFIG_IS_ENABLED(OF_BOARD_FIXUP) || \
     !CONFIG_IS_ENABLED(INITIAL_DTB_READONLY)
+	sg1002_init_delay();
 	INITCALL(reloc_fdt);
 #endif
+	sg1002_init_delay();
 	INITCALL(reloc_bootstage);
 	INITCALL(reloc_bloblist);
+	sg1002_init_delay();
 	INITCALL(setup_reloc);
 #if CONFIG_IS_ENABLED(X86) || CONFIG_IS_ENABLED(ARC)
 	INITCALL(copy_uboot_to_ram);
 	INITCALL(do_elf_reloc_fixups);
 #endif
+	sg1002_init_delay();
 	INITCALL(clear_bss);
 	/*
 	 * Deregister all cyclic functions before relocation, so that
@@ -1022,8 +1107,10 @@ static void initcall_run_f(void)
 	 * This should happen as late as possible so that the window where a
 	 * watchdog device is not serviced is as small as possible.
 	 */
+	sg1002_init_delay();
 	INITCALL(cyclic_unregister_all);
 #if !CONFIG_IS_ENABLED(ARM) && !CONFIG_IS_ENABLED(SANDBOX)
+	sg1002_init_delay();
 	INITCALL(jump_to_copy);
 #endif
 }
@@ -1031,6 +1118,15 @@ static void initcall_run_f(void)
 void board_init_f(ulong boot_flags)
 {
 	struct board_f boardf;
+
+	/*
+	 * boardf is stack-backed and was never zeroed.  With fdtdec_setup() skipped
+	 * on this board (gd->fdt_blob stays NULL), reserve_fdt() leaves
+	 * boardf.new_fdt as stack garbage and reloc_fdt() dereferences it: clear
+	 * every boardf field.
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD))
+		memset(&boardf, 0, sizeof(boardf));
 
 	gd->flags = boot_flags;
 	gd->flags &= ~GD_FLG_HAVE_CONSOLE;

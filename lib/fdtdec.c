@@ -624,7 +624,14 @@ int fdtdec_get_chosen_node(const void *blob, const char *name)
  */
 static int fdtdec_prepare_fdt(const void *blob)
 {
-	if (!blob || ((uintptr_t)blob & 3) || fdt_check_header(blob)) {
+	int ret;
+
+	if (!blob || ((uintptr_t)blob & 3))
+		goto invalid_fdt;
+
+	ret = fdt_check_header(blob);
+	if (ret) {
+invalid_fdt:
 		if (xpl_phase() <= PHASE_SPL) {
 			puts("Missing DTB\n");
 		} else {
@@ -1270,6 +1277,14 @@ static void *fdt_find_separate(void)
 		return NULL;
 
 #ifdef CONFIG_XPL_BUILD
+	/*
+	 * Stage-1 copies only the stored SG1002 Stage-2 binary to DDR. Its
+	 * appended control DTB follows _end in that binary; __bss_end lies beyond
+	 * the copied range and therefore contains arbitrary DDR contents.
+	 */
+	if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD))
+		return _end;
+
 	/* FDT is at end of BSS unless it is in a different memory region */
 	if (CONFIG_IS_ENABLED(SEPARATE_BSS))
 		fdt_blob = (ulong *)_image_binary_end;
@@ -1821,6 +1836,7 @@ int fdtdec_setup(void)
 {
 	int ret = -ENOENT;
 
+
 	/*
 	 * If allowing a bloblist, check that first. There was discussion about
 	 * adding an OF_BLOBLIST Kconfig, but this was rejected.
@@ -1853,6 +1869,21 @@ int fdtdec_setup(void)
 	if (ret) {
 		if (IS_ENABLED(CONFIG_OF_SEPARATE)) {
 			gd->fdt_blob = fdt_find_separate();
+			if (IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD) &&
+			    gd->fdt_blob) {
+				/*
+				 * _end is relocated with the code (apply_reloc() adds gd->reloc_off) but
+				 * relocate_code() only copies up to __image_copy_end, so after relocation
+				 * it points at unpopulated memory while the appended DTB is still at its
+				 * original address: undo the relocation with gd->reloc_off and use that
+				 * address if the FDT magic checks out.
+				 */
+				const u32 *orig_blob = (const u32 *)
+					((ulong)gd->fdt_blob - gd->reloc_off);
+
+				if (*orig_blob == 0xd00dfeedu)
+					gd->fdt_blob = orig_blob;
+			}
 			gd->fdt_src = FDTSRC_SEPARATE;
 		} else { /* embed dtb in ELF file for testing / development */
 			fdtdec_setup_embed();
@@ -1875,7 +1906,14 @@ int fdtdec_setup(void)
 	}
 
 	/* Allow the early environment to override the fdt address */
-	if (!IS_ENABLED(CONFIG_XPL_BUILD)) {
+	/*
+	 * The SG1002 factory payload always uses its appended control DTB.  Its
+	 * persisted SPI environment cannot be available this early (the SPI
+	 * driver model itself needs that DTB), so do not enter the generic early
+	 * environment lookup cycle here.
+	 */
+	if (!IS_ENABLED(CONFIG_XPL_BUILD) &&
+	    !IS_ENABLED(CONFIG_INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)) {
 		ulong addr;
 
 		addr = env_get_hex("fdtcontroladdr", 0);

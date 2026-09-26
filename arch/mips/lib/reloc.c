@@ -28,6 +28,7 @@
 
 #include <cpu_func.h>
 #include <init.h>
+#include <stdio.h>
 #include <asm/relocs.h>
 #include <asm/sections.h>
 #include <linux/bitops.h>
@@ -115,6 +116,14 @@ void relocate_code(ulong start_addr_sp, gd_t *new_gd, ulong relocaddr)
 	long off;
 
 	/*
+	 * Progress markers of the relocation path.  They only reach the console if a
+	 * pre-console buffer is configured, which this board does not have.
+	 */
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	putc('R');
+#endif
+
+	/*
 	 * Ensure that we're relocating by an offset which is a multiple of
 	 * 64KiB, ie. doesn't change the least significant 16 bits of any
 	 * addresses. This allows us to discard R_MIPS_LO16 relocs, saving
@@ -127,6 +136,9 @@ void relocate_code(ulong start_addr_sp, gd_t *new_gd, ulong relocaddr)
 	/* Copy U-Boot to RAM */
 	length = __image_copy_end - __text_start;
 	memcpy((void *)relocaddr, __text_start, length);
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	putc('C');
+#endif
 
 	/* Now apply relocations to the copy in RAM */
 	buf = __rel_start;
@@ -139,6 +151,9 @@ void relocate_code(ulong start_addr_sp, gd_t *new_gd, ulong relocaddr)
 		addr += read_uint(&buf) << 2;
 		apply_reloc(type, (void *)addr, off, buf);
 	}
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	putc('F');
+#endif
 
 	/* Ensure the icache is coherent */
 	flush_cache(relocaddr, length);
@@ -147,6 +162,9 @@ void relocate_code(ulong start_addr_sp, gd_t *new_gd, ulong relocaddr)
 	bss_start = (uint8_t *)((unsigned long)__bss_start + off);
 	bss_len = (unsigned long)__bss_end - (unsigned long)__bss_start;
 	memset(bss_start, 0, bss_len);
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	putc('J');
+#endif
 
 	/* Jump to the relocated U-Boot */
 	asm volatile(

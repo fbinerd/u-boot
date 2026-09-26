@@ -13,6 +13,7 @@
 #include <asm/addrspace.h>
 #include <asm/global_data.h>
 #include <asm/io.h>
+#include <asm/mipsregs.h>
 
 DECLARE_GLOBAL_DATA_PTR;
 
@@ -181,11 +182,23 @@ static void linux_env_legacy(struct bootm_headers *images)
 	sprintf(env_buf, "0x%08X", (uint) (gd->bd->bi_flashstart));
 	linux_env_set("flash_start", env_buf);
 
-	sprintf(env_buf, "0x%X", (uint) (gd->bd->bi_flashsize));
-	linux_env_set("flash_size", env_buf);
+	/*
+	 * The preserved SG1002 MR boot ROM passes a zero flash-size property to
+	 * its VxWorks image although it keeps the SPI XIP base.  Keep that legacy
+	 * ABI local to the handoff; U-Boot's recovery networking still uses the
+	 * actual SPI geometry.
+	 */
+	if (CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD))
+		linux_env_set("flash_size", "0x0");
+	else {
+		sprintf(env_buf, "0x%X", (uint) (gd->bd->bi_flashsize));
+		linux_env_set("flash_size", env_buf);
+	}
 
 	cp = env_get("ethaddr");
-	if (cp)
+	if (CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD))
+		linux_env_set("ethaddr", "DE:AD:BE:EF:01:02");
+	else if (cp)
 		linux_env_set("ethaddr", cp);
 
 	cp = env_get("eth1addr");
@@ -261,6 +274,12 @@ static void boot_jump_linux(struct bootm_headers *images)
 	kernel_entry_t kernel = (kernel_entry_t) images->ep;
 	ulong linux_extra = 0;
 
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	/* VxWorks bootrom waits for the factory handoff markers in RAM. */
+	*(volatile u32 *)CKSEG1ADDR(0x81ed2940) = 0x12348765;
+	*(volatile u32 *)CKSEG1ADDR(0x81ed2944) = 0x5a5ac3c3;
+#endif
+
 	debug("## Transferring control to Linux (at address %p) ...\n", kernel);
 
 	bootstage_mark(BOOTSTAGE_ID_RUN_OS);
@@ -269,6 +288,19 @@ static void boot_jump_linux(struct bootm_headers *images)
 		linux_extra = gd->ram_size;
 
 	bootm_final(0);
+
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	/*
+	 * The original SG1002 MR handoff enters the legacy image with the boot
+	 * exception vectors selected and EBase at the uncached SDRAM base.  Modern
+	 * U-Boot has moved EBase to its own relocated trap stack, which is correct
+	 * for U-Boot but not for this VxWorks bootrom's early exception setup.
+	 */
+	clear_c0_status(ST0_IE);
+	set_c0_status(ST0_BEV);
+	write_c0_ebase(0x80000000);
+	execution_hazard_barrier();
+#endif
 
 	if (CONFIG_IS_ENABLED(RESTORE_EXCEPTION_VECTOR_BASE))
 		trap_restore();

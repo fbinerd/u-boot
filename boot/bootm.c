@@ -615,6 +615,23 @@ static int bootm_load_os(struct bootm_headers *images, int boot_progress)
 	void *load_buf, *image_buf;
 	int err;
 
+#if CONFIG_IS_ENABLED(INTELBRAS_SG1002_MR_FACTORY_PAYLOAD)
+	/*
+	 * The preserved Intelbras uImage uses a KSEG1 destination while LMB
+	 * represents DDR through KSEG0. Both aliases address the same RAM.
+	 */
+	if ((load & 0xe0000000) == 0xa0000000) {
+		ulong phys = load & 0x1fffffff;
+		ulong ram_phys = gd->ram_base & 0x1fffffff;
+
+		if (phys >= ram_phys && phys < ram_phys + gd->ram_size) {
+			load = phys | 0x80000000;
+			images->os.load = load;
+			flush_start = ALIGN_DOWN(load, ARCH_DMA_MINALIGN);
+		}
+	}
+#endif
+
 	/*
 	 * For a "noload" compressed kernel we need to allocate a buffer large
 	 * enough to decompress in to and use that as the load address now.
