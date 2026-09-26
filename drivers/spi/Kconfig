@@ -101,6 +101,14 @@ config ATH79_SPI
 	  uses driver model and requires a device tree binding to operate.
 	  please refer to doc/device-tree-bindings/spi/spi-ath79.txt.
 
+config RTL8380_SPI
+	bool "Realtek RTL8380 SPI controller"
+	depends on SOC_RTL8380 && DM_SPI
+	help
+	  Enable the PIO SPI controller used for boot NOR on RTL8380 switch
+	  SoCs.  It supports standard single-bit SPI transfers and is suitable
+	  for the JEDEC SPI-NOR framework used by the recovery U-Boot.
+
 config ATMEL_QSPI
 	bool "Atmel Quad SPI Controller"
 	depends on ARCH_AT91
