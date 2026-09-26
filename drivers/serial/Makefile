@@ -29,6 +29,7 @@ obj-$(CONFIG_MXC_UART) += serial_mxc.o
 obj-$(CONFIG_MESON_SERIAL) += serial_meson.o
 obj-$(CONFIG_INTEL_MID_SERIAL) += serial_intel_mid.o
 obj-$(CONFIG_ROCKCHIP_SERIAL) += serial_rockchip.o
+obj-$(CONFIG_SERIAL_RTL8380) += serial_rtl8380.o
 obj-$(CONFIG_XILINX_UARTLITE) += serial_xuartlite.o
 obj-$(CONFIG_SANDBOX_SERIAL) += sandbox.o
 obj-$(CONFIG_SCIF_CONSOLE) += serial_sh.o

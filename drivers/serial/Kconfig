@@ -117,6 +117,13 @@ config DM_SERIAL
 	  implements serial_putc() etc. The uclass interface is
 	  defined in include/serial.h.
 
+config SERIAL_RTL8380
+	bool "Realtek RTL8380 UART"
+	depends on DM_SERIAL
+	help
+	  Enable the RTL8380 16550-compatible UART. Its byte registers are
+	  placed in the most-significant byte lane of 32-bit big-endian words.
+
 config SERIAL_RX_BUFFER
 	bool "Enable RX buffer for serial input"
 	depends on DM_SERIAL
