@@ -692,6 +692,13 @@ config RTL8169
 	  This driver supports Realtek 8169 series gigabit ethernet family of
 	  PCI/PCIe chipsets/adapters.
 
+config RTL838X_ETH
+	bool "Realtek RTL838x CPU-port Ethernet"
+	depends on MIPS
+	help
+	  Enable the polling Ethernet DMA driver for the integrated CPU port on
+	  Realtek RTL838x switch SoCs. It is intended for board recovery and TFTP.
+
 config SJA1105
 	bool "NXP SJA1105 Ethernet switch family driver"
 	depends on DM_DSA && DM_SPI
